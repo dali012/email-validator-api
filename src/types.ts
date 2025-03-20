@@ -1,7 +1,7 @@
 export interface Env {
   EMAIL_RESULTS: KVNamespace;
   DB: D1Database;
-  API_KEYS: KVNamespace;
+  ADMIN_SECRET_KEY: string;
 }
 
 export interface Variables {

@@ -64,15 +64,11 @@ The application uses two KV namespaces:
 
 ```json
 {
-  "kv_namespaces": [
-    { "binding": "EMAIL_RESULTS", "id": "enter_id_here" },
-    { "binding": "API_KEYS", "id": "enter_id_here" }
-  ]
+  "kv_namespaces": [{ "binding": "EMAIL_RESULTS", "id": "enter_id_here" }]
 }
 ```
 
 - `EMAIL_RESULTS`: Stores validation results for caching and performance.
-- `API_KEYS`: Manages API key storage and validation.
 
 ### D1 Database Binding
 
@@ -94,7 +90,6 @@ The application uses two KV namespaces:
 
 ```bash
 npx wrangler kv namespace create "EMAIL_RESULTS"
-npx wrangler kv namespace create "API_KEYS"
 ```
 
 #### Create D1 Database
@@ -227,8 +222,7 @@ curl -X POST https://your-api-domain.com/api/validate/bulk \
 For local development, set these in `.dev.vars`:
 
 ```bash
-SECRET_KEY=your-secret-key-here
-ADMIN_API_KEY=your-admin-key-here
+ADMIN_SECRET_KEY=your-admin-key-here
 ```
 
 ## Project Structure

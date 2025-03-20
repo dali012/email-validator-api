@@ -39,8 +39,8 @@ export function setupMiddlewares(
         );
       }
 
-      // Get the valid secret key from KV store
-      const validSecretKey = await c.env.API_KEYS.get("admin_secret_key");
+      // Get the valid secret key from environment variable/secret
+      const validSecretKey = c.env.ADMIN_SECRET_KEY;
 
       // If secret key doesn't match
       if (!validSecretKey || secretKey !== validSecretKey) {
