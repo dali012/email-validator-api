@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "email-validator-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-03-17",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+
+  //KV Namesapce bindings
+  "kv_namespaces": [
+    {
+      "binding": "EMAIL_RESULTS",
+      "id": "6dd6f2fc24a0481aa8efc262d6bb53ce"
+    },
+    {
+      "binding": "API_KEYS",
+      "id": "79b6703c904c433b9b8f61051c8f7f77"
+    }
+  ],
+
+  // D1 Database binding
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "email_validator",
+      "database_id": "66d6675d-aa1b-426a-ad86-0e43c23e268a"
+    }
+  ]
+}
