@@ -13,6 +13,18 @@
     {
       "binding": "EMAIL_RESULTS",
       "id": "6dd6f2fc24a0481aa8efc262d6bb53ce"
+    },
+    {
+      "binding": "PENDING_VERIFICATIONS",
+      "id": "c5ff46021c2046cab00880f6415b8b28"
+    },
+    {
+      "binding": "EMAIL_VERIFICATIONS",
+      "id": "f5610711c3564302a61be30f654bf427"
+    },
+    {
+      "binding": "API_USAGE",
+      "id": "1cc71109ef79447a9234d701ee5428da"
     }
   ],
 

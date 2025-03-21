@@ -1,100 +1,21 @@
-import { Bool, OpenAPIRoute } from "chanfana";
+import { OpenAPIRoute } from "chanfana";
 import { Context } from "hono";
+import { bulkEmailValidationSchema } from "schemas/bulkEmailValidation";
+import { createErrorResponse } from "utils/createErrorResponse";
 import { validateEmail } from "utils/email-validator";
-import { sanitizeEmail } from "utils/sanitize";
-import { z } from "zod";
 
 export class BulkEmailValidation extends OpenAPIRoute {
-  schema = {
-    tags: ["Email Validation"],
-    summary: "Validate multiple email addresses in batch",
-    description:
-      "Process multiple email validations in a single request. " +
-      "Validates syntax, deliverability, and detects disposable email patterns for each address.",
-    security: [{ APIKeyHeader: [] }],
-    request: {
-      body: {
-        content: {
-          "application/json": {
-            schema: z.object({
-              emails: z
-                .array(
-                  z
-                    .string({
-                      required_error: "Email is required",
-                      invalid_type_error: "Email must be a string",
-                    })
-                    .trim()
-                    .toLowerCase()
-                    .transform(sanitizeEmail),
-                  {
-                    description: "List of emails to validate (max 1000)",
-                  }
-                )
-                .min(1, {
-                  message: "At least one email is required",
-                })
-                .max(1000, {
-                  message: "Maximum 1000 emails per request",
-                }),
-            }),
-          },
-        },
-      },
-    },
-    responses: {
-      "200": {
-        description: "Returns validation results for multiple emails",
-        content: {
-          "application/json": {
-            schema: z.object({
-              success: Bool(),
-              results: z.array(
-                z.object({
-                  email: z.string(),
-                  is_valid: Bool(),
-                  score: z.number().min(0).max(1),
-                  suggested_correction: z.string().optional(),
-                  checks: z.object({
-                    syntax: Bool(),
-                    mx_records: Bool(),
-                    disposable: Bool(),
-                    role_account: Bool(),
-                    free_provider: Bool(),
-                  }),
-                })
-              ),
-            }),
-          },
-        },
-      },
-      "400": {
-        description: "Invalid request",
-        content: {
-          "application/json": {
-            schema: z.object({
-              success: Bool(),
-              error: z.string(),
-            }),
-          },
-        },
-      },
-      "500": {
-        description: "Server error during validation",
-        content: {
-          "application/json": {
-            schema: z.object({
-              success: Bool(),
-              error: z.string(),
-            }),
-          },
-        },
-      },
-    },
-  };
+  schema = bulkEmailValidationSchema;
 
   async handle(c: Context) {
     try {
+      // Get API key data (set by middleware)
+      const apiKeyData = c.get("apiKey");
+
+      if (!apiKeyData || !apiKeyData.email) {
+        return createErrorResponse("Unauthorized: Valid API key required", 401);
+      }
+
       const data = await this.getValidatedData<typeof this.schema>();
       const { emails } = data.body;
 
@@ -102,6 +23,25 @@ export class BulkEmailValidation extends OpenAPIRoute {
       const uniqueEmails = [
         ...new Set(emails.map((email) => email.trim().toLowerCase())),
       ];
+
+      // Check rate limit - this is in addition to the per-request limit in middleware
+      // For bulk operations, we count each email as one request
+      // If there are too many emails for the remaining quota, return an error
+      const currentHour = new Date().toISOString().slice(0, 13); // Format: YYYY-MM-DDTHH
+      const rateLimitKey = `rate_limit:${apiKeyData.key_value}:${currentHour}`;
+      const currentUsage = await c.env.API_USAGE.get(rateLimitKey);
+      const usageCount = currentUsage ? parseInt(currentUsage) : 0;
+
+      if (usageCount + uniqueEmails.length > apiKeyData.rate_limit) {
+        return createErrorResponse(
+          `Rate limit would be exceeded. You have ${
+            apiKeyData.rate_limit - usageCount
+          } requests remaining this hour, but this operation requires ${
+            uniqueEmails.length
+          } requests.`,
+          429
+        );
+      }
 
       // Prepare cache lookup map
       const cacheResults = new Map();
@@ -153,6 +93,23 @@ export class BulkEmailValidation extends OpenAPIRoute {
         );
       });
 
+      // Update API usage - count each email as one request
+      // This is just for non-cached emails to be fair to users
+      if (emailsToProcess.length > 0) {
+        await c.env.API_USAGE.put(
+          rateLimitKey,
+          (usageCount + emailsToProcess.length).toString(),
+          { expirationTtl: 3600 }
+        );
+
+        // Update total usage in the database
+        await c.env.DB.prepare(
+          "UPDATE api_keys SET total_requests = total_requests + ? WHERE key_value = ?"
+        )
+          .bind(emailsToProcess.length, apiKeyData.key_value)
+          .run();
+      }
+
       return c.json(
         {
           success: true,
@@ -172,12 +129,8 @@ export class BulkEmailValidation extends OpenAPIRoute {
           ? 400
           : 500);
 
-      return c.json(
-        {
-          success: false,
-          error:
-            error instanceof Error ? error.message : "Unknown validation error",
-        },
+      return createErrorResponse(
+        error instanceof Error ? error.message : "Unknown validation error",
         statusCode
       );
     }

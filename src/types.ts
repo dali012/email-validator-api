@@ -1,15 +1,14 @@
 export interface Env {
   EMAIL_RESULTS: KVNamespace;
+  PENDING_VERIFICATIONS: KVNamespace;
+  API_USAGE: KVNamespace;
   DB: D1Database;
-  ADMIN_SECRET_KEY: string;
+  API_BASE_URL: string;
+  EMAIL_FROM: string;
+  RESEND_API_KEY: string;
 }
 
-export interface Variables {
-  requestBody?: {
-    name: string;
-    expiresIn?: number;
-  };
-}
+export interface Variables {}
 
 interface DnsRecord {
   name: string;

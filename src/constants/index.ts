@@ -217,3 +217,10 @@ export const DOMAIN_TYPOS: Record<string, string> = {
   "comcastt.net": "comcast.net",
   "comcat.net": "comcast.net",
 };
+
+export const KEY_LIMIT = 3;
+
+export const DEFAULT_RATE_LIMIT = 100;
+
+export const DEFAULT_EXPIRATION_PERIOD_MS = 365 * 24 * 60 * 60 * 1000;
+// 1 year in milliseconds

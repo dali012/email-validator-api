@@ -1,114 +1,47 @@
-import { Bool, OpenAPIRoute } from "chanfana";
+import { OpenAPIRoute } from "chanfana";
 import { Context } from "hono";
+import { validateEmailSchema } from "schemas/validateEmail";
+import { createErrorResponse } from "utils/createErrorResponse";
+import { createSuccessResponse } from "utils/createSuccessResponse";
 import { validateEmail } from "utils/email-validator";
-import { sanitizeEmail } from "utils/sanitize";
-import { z } from "zod";
 
 export class ValidateEmail extends OpenAPIRoute {
-  schema = {
-    tags: ["Email Validation"],
-    summary: "Validate an email address",
-    description:
-      "Validates email address format, checks for deliverability, and detects disposable email patterns. " +
-      "Returns a validation score and specific checks including syntax validity, mail server availability, " +
-      "disposable email detection, and role-based account identification.",
-    security: [{ APIKeyHeader: [] }],
-    request: {
-      query: z.object({
-        email: z
-          .string({
-            description: "Email address to validate",
-            required_error: "Email address is required",
-            invalid_type_error: "Email must be a string",
-          })
-          .trim()
-          .toLowerCase()
-          .transform(sanitizeEmail),
-      }),
-    },
-    responses: {
-      "200": {
-        description: "Returns email validation result",
-        content: {
-          "application/json": {
-            schema: z.object({
-              success: Bool(),
-              result: z.object({
-                email: z.string(),
-                is_valid: Bool(),
-                score: z.number().min(0).max(1),
-                suggested_correction: z.string().optional(),
-                checks: z.object({
-                  syntax: Bool(),
-                  mx_records: Bool(),
-                  disposable: Bool(),
-                  role_account: Bool(),
-                  free_provider: Bool(),
-                }),
-              }),
-            }),
-          },
-        },
-      },
-      "304": {
-        description: "Not Modified (content hasn't changed)",
-      },
-      "400": {
-        description: "Missing or invalid email parameter",
-        content: {
-          "application/json": {
-            schema: z.object({
-              success: Bool(),
-              error: z.string(),
-            }),
-          },
-        },
-      },
-      "500": {
-        description: "Server error during validation",
-        content: {
-          "application/json": {
-            schema: z.object({
-              success: Bool(),
-              error: z.string(),
-            }),
-          },
-        },
-      },
-    },
-  };
+  schema = validateEmailSchema;
 
   async handle(c: Context) {
     try {
+      // Get API key data (set by middleware)
+      const apiKeyData = c.get("apiKey");
+
+      if (!apiKeyData || !apiKeyData.email) {
+        return createErrorResponse("Unauthorized: Valid API key required", 401);
+      }
+
       // Validate the request data
       const data = await this.getValidatedData<typeof this.schema>();
       const { email } = data.query;
 
       // Generate ETag for this request
       const etag = `"${email}-v1"`;
+      const cacheHeaders = {
+        ETag: etag,
+        "Cache-Control": "public, max-age=86400",
+      };
 
       // Check If-None-Match header for caching
       const ifNoneMatch = c.req.header("if-none-match");
       if (ifNoneMatch === etag) {
-        return c.newResponse(null, 304, {
-          ETag: etag,
-          "Cache-Control": "public, max-age=86400",
-        });
+        return c.newResponse(null, 304, cacheHeaders);
       }
 
       // Check cache first
       const cachedResult = await c.env.EMAIL_RESULTS.get(email);
       if (cachedResult) {
-        return c.json(
-          {
-            success: true,
-            result: JSON.parse(cachedResult),
-          },
+        return createSuccessResponse(
+          c,
+          JSON.parse(cachedResult),
           200,
-          {
-            ETag: etag,
-            "Cache-Control": "public, max-age=86400",
-          }
+          cacheHeaders
         );
       }
 
@@ -120,17 +53,7 @@ export class ValidateEmail extends OpenAPIRoute {
         expirationTtl: 86400,
       });
 
-      return c.json(
-        {
-          success: true,
-          result,
-        },
-        200,
-        {
-          ETag: etag,
-          "Cache-Control": "public, max-age=86400",
-        }
-      );
+      return createSuccessResponse(c, result, 200, cacheHeaders);
     } catch (error) {
       console.error("Email validation error:", error);
 
@@ -143,12 +66,8 @@ export class ValidateEmail extends OpenAPIRoute {
           ? 400
           : 500);
 
-      return c.json(
-        {
-          success: false,
-          error:
-            error instanceof Error ? error.message : "Unknown validation error",
-        },
+      return createErrorResponse(
+        error instanceof Error ? error.message : "Unknown validation error",
         statusCode
       );
     }
